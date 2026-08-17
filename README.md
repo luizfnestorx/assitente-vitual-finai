@@ -114,7 +114,3 @@ Veja a documentação completa em `docs/`:
 ## 📝 Licença
 
 MIT License - Veja LICENSE para detalhes.
-
----
-
-**Desenvolvido com ❤️ para a Digital Innovation One (DIO)**
