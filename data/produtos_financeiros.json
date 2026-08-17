@@ -1,0 +1,24 @@
+[
+  {
+    "id": "PROD-01",
+    "nome": "CDB Liquidez Diária",
+    "categoria": "Renda Fixa",
+    "indexador": "CDI",
+    "rentabilidade": "100% do CDI",
+    "risco": "Baixo",
+    "liquidez": "Diária (D+0)",
+    "garantia_fgc": true,
+    "indicacao": "Reserva de Emergência"
+  },
+  {
+    "id": "PROD-02",
+    "nome": "Tesouro Selic 2029",
+    "categoria": "Renda Fixa Pública",
+    "indexador": "SELIC",
+    "rentabilidade": "Selic + 0.05%",
+    "risco": "Muito Baixo",
+    "liquidez": "Diária (D+1)",
+    "garantia_fgc": false,
+    "indicacao": "Preservação de Capital"
+  }
+]

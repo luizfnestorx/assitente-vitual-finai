@@ -1,0 +1,6 @@
+data,categoria,descricao,valor,tipo
+2026-08-01,Alimentacao,Supermercado Central,-250.00,Saida
+2026-08-02,Transporte,Posto de Combustivel,-180.00,Saida
+2026-08-03,Rendimento,Proventos CDB,+45.20,Entrada
+2026-08-04,Lazer,Restaurante,-120.00,Saida
+2026-08-05,Investimento,Aporte CDB Liquidez Diaria,-500.00,Saida

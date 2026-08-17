@@ -1,0 +1,25 @@
+# Ambiente Virtual Python
+venv/
+env/
+.venv/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Segredos
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
