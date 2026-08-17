@@ -1,16 +1,16 @@
 # 💡 FinAI - Assistente Virtual Educativo de Finanças Pessoais
 
-> Projeto desenvolvido para o Lab **"Construa Seu Assistente Virtual Com Inteligência Artificial"** da Digital Innovation One (DIO)[cite: 3].
+> Projeto desenvolvido para o Lab **"Construa Seu Assistente Virtual Com Inteligência Artificial"** da Digital Innovation One (DIO).
 
 ---
 
 ## 🎯 Visão Geral
-O **FinAI** é um assistente virtual voltado à educação financeira pessoal[cite: 3]. Ele auxilia usuários a entenderem conceitos sobre renda fixa, simularem investimentos/financiamentos com **precisão matemática exata via código Python** e organizarem o orçamento familiar sem o uso de jargões complexos[cite: 2, 3].
+O **FinAI** é um assistente virtual voltado à educação financeira pessoal. Ele auxilia usuários a entenderem conceitos sobre renda fixa, simularem investimentos/financiamentos com **precisão matemática exata via código Python** e organizarem o orçamento familiar sem o uso de jargões complexos.
 
 ### Diferenciais Principais:
-- **Zero Alucinação Matemática:** Cálculos de juros e financiamentos executados em sandbox via Python[cite: 3].
-- **Segurança e Privacidade (LGPD):** Sanitização automática de PII (CPFs e dados sensíveis)[cite: 2, 3].
-- **Conformidade Legal:** Inclusão automática de disclaimers operacionais em todas as simulações[cite: 3].
+- **Zero Alucinação Matemática:** Cálculos de juros e financiamentos executados em sandbox via Python.
+- **Segurança e Privacidade (LGPD):** Sanitização automática de PII (CPFs e dados sensíveis).
+- **Conformidade Legal:** Inclusão automática de disclaimers operacionais em todas as simulações.
 
 ---
 
