@@ -8,21 +8,42 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+*.egg
 
-# Testes (locais apenas, não commitados)
-tests/
-
-# Segredos
+# Dados sensíveis e históricos
+data/historico_atendimento.csv
 .env
 .env.local
+.env.*.local
+*.key
+*.pem
+*.p12
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
 
 # Sistema Operacional
 .DS_Store
 Thumbs.db
+*.log
 
 # Streamlit
 .streamlit/
+*.streamlit/
+
+# Build e distribuição
+build/
+dist/
+*.whl
+*.tar.gz
+
+# Testes e coverage
+.coverage
+htmlcov/
+

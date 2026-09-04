@@ -21,7 +21,8 @@ O **FinAI** é um assistente virtual educativo focado em educação financeira p
 
 ### Pré-requisitos
 - Python 3.10+
-- Ollama local (opcional) ou Chave Anthropic API
+- Ollama local (obrigatório para usar LLM)
+- Pasta `data/` com arquivos de dados: `perfil_investidor.json`, `produtos_financeiros.json`, `transacoes.csv`
 
 ### Instalação
 
@@ -61,19 +62,22 @@ src/
 data/
 ├── perfil_investidor.json
 ├── produtos_financeiros.json
-├── transacoes.csv
-└── historico_atendimento.csv
+└── transacoes.csv
 
 docs/
 ├── 01-documentacao-agente.md
 ├── 02-base-de-conhecimento.md
 ├── 03-prompts.md
 ├── 04-metricas.md
-└── 05-pitch.md
+├── 05-pitch.md
+└── 06-edge-cases-parsing.md
 
 requirements.txt        # Dependências
 README.md              # Este arquivo
 ```
+
+> **Nota:** `historico_atendimento.csv` é gerado automaticamente na primeira execução (registra todas as interações para auditoria).
+
 
 ---
 
@@ -90,11 +94,11 @@ README.md              # Este arquivo
 ## 🧪 Como Usar
 
 ```
-"simular com 1000"                          → Simulação de juros
-"financiar 100000 por 10 anos com taxa 8"  → Tabela SAC
-"quanto rendo em 12 meses?"                 → Cálculo determinístico
-"qual a diferença entre CDB e Tesouro?"    → Explicação educativa
-"Meu CPF é 123.456.789-00"                 → Sanitizado automaticamente
+"simular 1000 reais em 12 meses com taxa 10,5%"  → Simulação de juros compostos
+"financiar 100000 por 10 anos com taxa 8%"       → Tabela SAC com amortização
+"quanto rendo com 500 reais em 24 meses?"        → Cálculo determinístico de rendimento
+"qual a diferença entre CDB e Tesouro?"          → Explicação educativa com guardrails
+"Meu CPF é 123.456.789-00"                       → Sanitizado automaticamente (LGPD)
 ```
 
 ---
@@ -104,10 +108,11 @@ README.md              # Este arquivo
 Veja a documentação completa em `docs/`:
 
 - **01-documentacao-agente.md** — Arquitetura técnica
-- **02-base-de-conhecimento.md** — RAG Híbrido
+- **02-base-de-conhecimento.md** — Base de Conhecimento Estruturada
 - **03-prompts.md** — System prompts
 - **04-metricas.md** — Testes e qualidade
 - **05-pitch.md** — Pitch do projeto
+- **06-edge-cases-parsing.md** — Edge cases e limitações do parsing
 
 ---
 

@@ -1,4 +1,7 @@
 import json
+import os
+import sys
+from datetime import datetime
 
 import requests
 import pandas as pd
@@ -8,11 +11,83 @@ from calculator import (
     simular_financiamento_sac,
     validar_entrada_simulacao,
     extrair_numeros,
+    extrair_numeros_contextualizados,
 )
 from prompt import DISCLAIMER_LEGAL, SYSTEM_PROMPT, sanitizar_entrada
 
+# Define caminho base do projeto para arquivos estáticos
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "../data")
+
+
+def validar_arquivos_necessarios():
+    """Valida se todos os arquivos estruturados existem antes de iniciar."""
+    arquivos_obrigatorios = [
+        os.path.join(DATA_DIR, "produtos_financeiros.json"),
+        os.path.join(DATA_DIR, "perfil_investidor.json"),
+        os.path.join(DATA_DIR, "transacoes.csv"),
+    ]
+
+    arquivos_faltando = [arq for arq in arquivos_obrigatorios if not os.path.exists(arq)]
+
+    if arquivos_faltando:
+        st.error(f"❌ Arquivos estruturados faltando:\n{chr(10).join(arquivos_faltando)}")
+        st.stop()
+
+
+
+# Formata valor monetário em Real (padrão brasileiro: R$ X.XXX,XX)
+def formatar_moeda(valor: float) -> str:
+    """Formata número como moeda brasileira respeitando padrão BR: R$ X.XXX,XX.
+
+    Exemplo:
+        4000.5 → "R$ 4.000,50"
+        8.53 → "R$ 8,53"
+    """
+    formatado = f"R$ {valor:,.2f}"
+    return formatado.replace(",", "TEMP").replace(".", ",").replace("TEMP", ".")
+
+
+# Registra atendimento em log (historico_atendimento.csv)
+def registrar_atendimento(pergunta: str, tipo: str, resumo: str):
+    """Registra cada interação do usuário para auditoria e análise de qualidade.
+
+    Args:
+        pergunta: entrada do usuário (texto bruto ou sanitizado)
+        tipo: classificação da interação ("Simulação SAC", "Simulação Juros", "Análise Gastos", "Consulta Educativa", "Erro")
+        resumo: descrição breve do resultado (máx. 100 caracteres)
+
+    Note:
+        Falhas no logging não interrompem o app — registra apenas em stderr se houver erro.
+    """
+    try:
+        # Cria dataframe com nova linha
+        novo_registro = pd.DataFrame({
+            "data": [datetime.now().strftime("%Y-%m-%d")],
+            "assunto": [tipo],
+            "resumo": [resumo[:100]]  # Limita a 100 caracteres
+        })
+
+        # Carrega histórico existente
+        historico_path = os.path.join(DATA_DIR, "historico_atendimento.csv")
+        try:
+            historico = pd.read_csv(historico_path)
+            historico = pd.concat([historico, novo_registro], ignore_index=True)
+        except FileNotFoundError:
+            historico = novo_registro
+
+        # Salva de volta
+        historico.to_csv(historico_path, index=False)
+    except Exception as e:
+        import sys
+        print(f"WARN: Falha ao registrar atendimento: {e}", file=sys.stderr)
+
 # Configuração básica da interface Streamlit
 st.set_page_config(page_title="FinAI - Educador Financeiro", page_icon="💡", layout="centered")
+
+# Valida arquivos estruturados na inicialização
+validar_arquivos_necessarios()
+
 st.title("💡 FinAI - Assistente de Finanças Pessoais")
 st.caption("Aprenda sobre investimentos e faça simulações com precisão matemática exata.")
 
@@ -21,11 +96,11 @@ st.caption("Aprenda sobre investimentos e faça simulações com precisão matem
 @st.cache_data
 def carregar_base():
     """Carrega a base de conhecimento: produtos financeiros, perfil e transações."""
-    with open("data/produtos_financeiros.json", "r", encoding="utf-8") as f:
+    with open(os.path.join(DATA_DIR, "produtos_financeiros.json"), "r", encoding="utf-8") as f:
         produtos = json.load(f)
-    with open("data/perfil_investidor.json", "r", encoding="utf-8") as f:
+    with open(os.path.join(DATA_DIR, "perfil_investidor.json"), "r", encoding="utf-8") as f:
         perfil = json.load(f)
-    transacoes = pd.read_csv("data/transacoes.csv")
+    transacoes = pd.read_csv(os.path.join(DATA_DIR, "transacoes.csv"))
     return produtos, perfil, transacoes
 
 
@@ -52,7 +127,17 @@ for msg in st.session_state.messages:
 
 # Constrói o prompt de sistema com contexto personalizado
 def construir_system_prompt() -> str:
-    """Monta o system prompt incluindo os dados estruturados (perfil, produtos, indicadores)."""
+    """Monta o system prompt incluindo dados estruturados (perfil, produtos, indicadores).
+
+    Combina:
+    - System prompt base com diretrizes de comportamento e guardrails
+    - Perfil do usuário (tipo de investidor, meta financeira)
+    - Catálogo de produtos financeiros disponíveis
+    - Indicadores de mercado de referência (SELIC, CDI, IPCA)
+
+    Returns:
+        str: prompt completo pronto para enviar ao LLM
+    """
     # Serializa base de conhecimento em JSON para incluir no prompt
     produtos_txt = json.dumps(produtos_db, ensure_ascii=False, indent=2)
     perfil_txt = json.dumps(perfil_db, ensure_ascii=False, indent=2)
@@ -78,9 +163,21 @@ INDICADORES DE MERCADO (referência):
 
 # Função que chama o modelo LLM local (Ollama) para respostas conversacionais
 def chamar_ollama(historico: list) -> str:
-    """Envia o histórico de conversa ao Ollama e retorna a resposta do modelo.
+    """Chama o LLM local (Ollama) via API REST para respostas conversacionais educativas.
 
-    Trata erros de conexão e timeout.
+    Args:
+        historico: lista de dicts com role ('user'/'assistant') e content (texto da mensagem)
+
+    Returns:
+        str: resposta do modelo Mistral
+
+    Raises:
+        ConnectionError: se Ollama não estiver rodando em localhost:11434
+        Exception: para outros erros (parsing, API, etc)
+
+    Note:
+        Timeout: 600s (10 min) para dar tempo ao Mistral rodar localmente.
+        Spinner mostra "Pensando..." durante a espera.
     """
     try:
         # Filtra apenas mensagens com role válido (user/assistant)
@@ -116,7 +213,7 @@ RESPOSTA:"""
                 "stream": False,                # Desativa streaming (resposta completa)
                 "temperature": 0.7,             # Controla criatividade (0-1)
             },
-            timeout=600,                        # Aguarda até 10 minutos
+            timeout=600,                       # 10 minutos para Ollama local responder
         )
 
         # Levanta exceção se status != 2xx
@@ -127,12 +224,10 @@ RESPOSTA:"""
 
     except requests.exceptions.ConnectionError:
         # Ollama não está rodando em localhost:11434
-        return (
-            "❌ Ollama não está rodando. Abra outro terminal e execute: `ollama serve`"
-        )
+        raise ConnectionError("❌ Ollama não está rodando. Abra outro terminal e execute: `ollama serve`")
     except Exception as e:
-        # Outros erros (timeout, parsing, etc)
-        return f"❌ Erro: {str(e)[:200]}"
+        # Outros erros (parsing, etc)
+        raise Exception(f"❌ Erro ao chamar Ollama: {str(e)[:200]}")
 
 
 if user_input := st.chat_input("Digite sua dúvida, peça uma simulação ou resumo de gastos..."):
@@ -149,15 +244,16 @@ if user_input := st.chat_input("Digite sua dúvida, peça uma simulação ou res
 
     query = texto_limpo.lower()
     resposta = None
+    numeros = extrair_numeros(texto_limpo)
 
     # FLUXO 1: Se o usuário pede simulação de financiamento (SAC)
-    if any(k in query for k in ("financiamento", "sac", "parcela", "empréstimo")):
-        numeros = extrair_numeros(texto_limpo)
+    if any(k in query for k in ("financiamento", "financiar", "sac", "parcela", "empréstimo")) and numeros:
+        # Usa parsing inteligente para mapear números ao seu significado
+        params = extrair_numeros_contextualizados(texto_limpo)
 
-        # Define valores padrão ou extrai do input do usuário
-        valor_total = numeros[0] if numeros else 100000.0
-        taxa_anual = numeros[1] if len(numeros) > 1 else 12.0
-        meses = int(numeros[2]) if len(numeros) > 2 else 360
+        valor_total = params["valor"] if params["valor"] else 100000.0
+        taxa_anual = params["taxa"] if params["taxa"] else 12.0
+        meses = params["meses"] if params["meses"] else 360
 
         # Valida os números antes de executar a simulação
         valido, erro = validar_entrada_simulacao(
@@ -171,22 +267,24 @@ if user_input := st.chat_input("Digite sua dúvida, peça uma simulação ou res
         else:
             res = simular_financiamento_sac(valor_total, taxa_anual, meses)
             resposta = (
-                f"Simulação de financiamento — Tabela SAC (R$ {valor_total:,.0f} | {taxa_anual}% a.a. | {meses} meses):\n\n"
-                f"- 🏦 **Primeira Parcela:** R$ {res['primeira_parcela']:.2f}\n"
-                f"- 📉 **Última Parcela:** R$ {res['ultima_parcela']:.2f}\n"
-                f"- 💸 **Total Pago:** R$ {res['total_pago']:.2f}\n"
-                f"- 💡 **Total de Juros:** R$ {res['total_juros']:.2f}"
+                f"Simulação de financiamento — Tabela SAC ({formatar_moeda(valor_total)} | {taxa_anual}% a.a. | {meses} meses):\n\n"
+                f"- Primeira Parcela: {formatar_moeda(res['primeira_parcela'])}\n"
+                f"- Última Parcela: {formatar_moeda(res['ultima_parcela'])}\n"
+                f"- Total Pago: {formatar_moeda(res['total_pago'])}\n"
+                f"- Total de Juros: {formatar_moeda(res['total_juros'])}\n"
                 f"{DISCLAIMER_LEGAL}"
             )
-    # FLUXO 2: Se o usuário pede simulação de juros compostos
-    elif any(k in query for k in ("simular", "quanto rende", "simulação", "rendimento")):
-        numeros = extrair_numeros(texto_limpo)
 
-        # Define valores padrão ou extrai do input do usuário
-        valor_inicial = numeros[0] if numeros else 1000.0
-        aporte_mensal = numeros[1] if len(numeros) > 1 else 100.0
-        taxa_anual = numeros[2] if len(numeros) > 2 else 10.5
-        meses = int(numeros[3]) if len(numeros) > 3 else 12
+    # FLUXO 2: Se o usuário pede simulação de juros compostos (tem números + palavra-chave de simulação)
+    # Só executa se FLUXO 1 não foi acionado (resposta ainda é None)
+    elif resposta is None and (any(k in query for k in ("simular", "quanto rende", "simulação", "rendimento", "composto", "investir", "aplicar", "rende", "ganhar")) and numeros):
+        # Usa parsing inteligente para mapear números ao seu significado
+        params = extrair_numeros_contextualizados(texto_limpo)
+
+        valor_inicial = params["valor"] if params["valor"] else 1000.0
+        aporte_mensal = params["aporte"] if params["aporte"] else 0.0
+        taxa_anual = params["taxa"] if params["taxa"] else 10.5
+        meses = params["meses"] if params["meses"] else 12
 
         # Valida os números antes de executar a simulação
         valido, erro = validar_entrada_simulacao(
@@ -202,34 +300,55 @@ if user_input := st.chat_input("Digite sua dúvida, peça uma simulação ou res
             res = simular_juros_compostos(valor_inicial, aporte_mensal, taxa_anual, meses)
             resposta = (
                 f"Simulação de juros compostos ({taxa_anual}% a.a., {meses} meses):\n\n"
-                f"- 💵 **Total Investido:** R$ {res['total_investido']:.2f}\n"
-                f"- 📈 **Juros Acumulados:** R$ {res['total_juros']:.2f}\n"
-                f"- 💰 **Saldo Final Estimado:** R$ {res['saldo_final']:.2f}"
+                f"- Total Investido: {formatar_moeda(res['total_investido'])}\n"
+                f"- Juros Acumulados: {formatar_moeda(res['total_juros'])}\n"
+                f"- Saldo Final Estimado: {formatar_moeda(res['saldo_final'])}\n"
                 f"{DISCLAIMER_LEGAL}"
             )
-    elif any(k in query for k in ("gastos", "extrato", "orçamento", "transações", "transacoes")):
-        # FLUXO 3: Análise de gastos do usuário usando dados do CSV
-        # Filtra transações com tipo "Saida" e soma os valores (já negativos)
-        total_saidas = abs(transacoes_df[transacoes_df["tipo"] == "Saida"]["valor"].sum())
 
-        # Filtra transações com tipo "Entrada" e soma os valores
-        total_entradas = transacoes_df[transacoes_df["tipo"] == "Entrada"]["valor"].sum()
+    # FLUXO 3: Análise de gastos (só executa se Fluxo 1 e 2 não foram acionados)
+    elif resposta is None and any(k in query for k in ("gastos", "extrato", "orçamento", "transações", "transacoes")):
+        # Valida se há dados no CSV
+        if transacoes_df.empty:
+            resposta = "⚠️ Nenhuma transação encontrada na base de dados. Adicione transações para análise."
+        else:
+            # Filtra transações com tipo "Saida" e soma os valores (já negativos)
+            total_saidas = abs(transacoes_df[transacoes_df["tipo"] == "Saida"]["valor"].sum())
 
-        # Monta resposta com resumo financeiro
-        resposta = (
-            f"Resumo do histórico de transações:\n\n"
-            f"- 💚 **Total de Entradas:** R$ {total_entradas:.2f}\n"
-            f"- 🔴 **Total de Saídas:** R$ {total_saidas:.2f}\n"
-            f"- 📊 **Saldo:** R$ {(total_entradas - total_saidas):.2f}\n\n"
-            "Quer sugestões para otimizar seu orçamento?"
-        )
+            # Filtra transações com tipo "Entrada" e soma os valores
+            total_entradas = transacoes_df[transacoes_df["tipo"] == "Entrada"]["valor"].sum()
+
+            # Monta resposta com resumo financeiro
+            resposta = (
+                f"Resumo do histórico de transações:\n\n"
+                f"- Total de Entradas: {formatar_moeda(total_entradas)}\n"
+                f"- Total de Saídas: {formatar_moeda(total_saidas)}\n"
+                f"- Saldo: {formatar_moeda(total_entradas - total_saidas)}\n\n"
+                "Quer sugestões para otimizar seu orçamento?"
+            )
+
     else:
         # FLUXO 4: Para dúvidas gerais, chama o modelo LLM (Ollama)
-        # Não é uma simulação específica, então usa IA conversacional
-        with st.spinner("Pensando..."):
-            resposta = chamar_ollama(st.session_state.messages)
+        # Só executa se nenhum outro fluxo foi acionado (resposta é None)
+        if resposta is None:
+            try:
+                with st.spinner("Pensando..."):
+                    resposta = chamar_ollama(st.session_state.messages)
+            except (ConnectionError, Exception) as e:
+                st.error(str(e))
+                resposta = None
 
     # Renderiza a resposta no chat e salva no histórico
     if resposta:
+        # Registra o atendimento no histórico
+        if any(k in query for k in ("financiamento", "financiar", "sac", "parcela", "empréstimo")):
+            registrar_atendimento(texto_limpo, "Simulação SAC", f"Financiamento simulado")
+        elif any(k in query for k in ("simular", "quanto rende", "simulação", "rendimento", "composto", "investir", "aplicar", "rende", "ganhar")):
+            registrar_atendimento(texto_limpo, "Simulação Juros", f"Juros compostos simulados")
+        elif any(k in query for k in ("gastos", "extrato", "orçamento", "transações", "transacoes")):
+            registrar_atendimento(texto_limpo, "Análise Gastos", f"Resumo de transações")
+        else:
+            registrar_atendimento(texto_limpo, "Consulta Educativa", f"LLM respondeu")
+
         st.session_state.messages.append({"role": "assistant", "content": resposta})
         st.chat_message("assistant").write(resposta)

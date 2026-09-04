@@ -2,11 +2,11 @@
 
 ## 1. Visão Geral e Objetivos de Dados
 
-A base de conhecimento e a estrutura de dados do **FinAI** alimentam o motor conversacional (LLM) e a calculadora em sandbox com dados financeiros precisos, contextualizados e seguros.
+A base de conhecimento do **FinAI** alimenta o motor conversacional (LLM) e a calculadora em sandbox com dados financeiros estruturados e seguros.
 
-O ecossistema atende a três propósitos fundamentais:
+O ecossistema atende a dois propósitos fundamentais:
 1. **Personalização da Experiência:** Orientar o usuário considerando seu perfil e objetivo (faixa etária de 20–35 anos, iniciantes em finanças, famílias).
-2. **Confiabilidade e Precisão:** Manter taxas e produtos alinhados aos indicadores oficiais (SELIC, CDI, IPCA).
+2. **Confiabilidade e Precisão:** Manter dados e produtos alinhados aos indicadores oficiais (SELIC, CDI, IPCA).
 3. **Privacidade e Conformidade (LGPD):** Bloquear a persistência e processamento não autorizado de Dados Pessoais Identificáveis (PII).
 
 ---
@@ -71,34 +71,41 @@ data,categoria,descricao,valor,tipo
 
 ---
 
-## 3. Estratégia de RAG Híbrido
+## 3. Estratégia de Recuperação de Contexto (Versão Atual)
 
-Para responder dúvidas com precisão sem alucinar informações de produtos ou indicadores financeiros, o **FinAI** adota um mecanismo híbrido de busca:
+O **FinAI** utiliza uma abordagem **simples e determinística** de carregamento de dados:
 
 ```mermaid
 flowchart TD
-    A[Prompt Sanitizado do Usuário] --> B{Recuperação Híbrida}
+    A[Prompt Sanitizado do Usuário] --> B{Tipo de Requisição?}
     
-    B -->|Busca Lexical BM25| C[Termos Exatos: CDB, SELIC, CDI, IPCA, FGC]
-    B -->|Busca Vetorial Dense| D[Conceitos: Reserva de emergência, organizar contas]
-    B -->|Tabela de Indicadores| E[Taxas Oficiais Atualizadas: SELIC e CDI]
+    B -->|Simulação: Financiamento| C[Fluxo 1: SAC]
+    B -->|Simulação: Juros| D[Fluxo 2: Juros Compostos]
+    B -->|Análise: Gastos| E[Fluxo 3: Extrato]
+    B -->|Consulta Geral| F[Fluxo 4: LLM + Contexto]
     
-    C --> F[Fusão de Contexto e Reranking]
-    D --> F
-    E --> F
+    C --> G[Calculadora Python]
+    D --> G
+    E --> H[Análise CSV]
+    F --> I[LLM recebe contexto]
     
-    F --> G[Contexto RAG Final] --> H[LLM - Geração de Resposta]
+    G --> J[Resposta com Disclaimer]
+    H --> J
+    I --> J
 ```
 
-### Componentes de Busca:
-1. **Busca Lexical (BM25):** Garante a recuperação exata ao procurar por siglas técnicas e produtos específicos (CDB, LCI, LCA, IPCA, SELIC, FGC).
-2. **Busca Vetorial (Embeddings):** Mapeia frases informais do usuário para conceitos financeiros educativos (ex.: *"como guardar dinheiro para imprevistos"* $ightarrow$ *Reserva de Emergência*).
-3. **Indicadores de Referência:** Mantém uma tabela atualizada com os valores vigentes da Taxa SELIC, CDI e Inflação (IPCA) para alimentação dos cálculos.
+### Componentes de Busca (Atuais):
+1. **Identificação de Intenção (Keywords):** Regex e keywords determinísticos detectam tipo de requisição
+2. **Dados Estáticos em Memória:** `produtos_financeiros.json` e `perfil_investidor.json` carregados ao iniciar
+3. **Passagem de Contexto ao LLM:** Dados são serializados em JSON e incluídos no system prompt para consultas gerais
+
+### Indicadores de Referência:
+Os valores de SELIC, CDI e IPCA são **atualizados manualmente** no código quando há mudanças oficiais. Não há atualização automática.
 
 ---
 
 ## 4. Governança, Proteção de Dados (LGPD) e Integridade
 
 1. **Anonimização de PII na Entrada:** O sistema mascareia dados pessoais sensíveis antes do armazenamento ou envio ao LLM (ex.: substitui CPFs por `[CPF-REDACTED]`).
-2. **Separação de Papéis:** O RAG serve apenas para contexto conceitual e informativo. Toda operação matemática e numérica é delegada à Calculadora Sandbox em Python.
+2. **Separação de Papéis:** O contexto estruturado serve apenas para o LLM receber informações. Toda operação matemática é delegada à Calculadora Sandbox em Python.
 3. **Trilha de Auditoria (Audit Trail):** Registro em log estruturado contendo apenas o prompt sanitizado, as ferramentas consultadas e os resultados numéricos retornados.

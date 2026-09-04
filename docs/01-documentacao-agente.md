@@ -25,12 +25,12 @@ O **FinAI** é um assistente virtual educativo focado em finanças pessoais. Ele
 
 ```mermaid
 flowchart TD
-    A[Usuário] --> B[Interface - Streamlit / React]
+    A[Usuário] --> B[Interface - Streamlit]
     B --> C[Filtro de Entrada: Sanitização de PII]
     
     subgraph Núcleo do Agente
         C --> D[LLM - Orquestrador Conversacional]
-        D <--> E[Base RAG: Catálogo & Indicadores Selic/CDI]
+        D <--> E[Base de Conhecimento: Catálogo & Indicadores Selic/CDI]
         D <--> F[Calculadora Python em Sandbox]
     end
     
@@ -40,19 +40,20 @@ flowchart TD
 
 ### Componentes Básicos
 1. **Filtro de Entrada:** Oculta dados pessoais (ex: CPF vira `[CPF-REDACTED]`).
-2. **LLM Conversacional:** Entende o que o usuário quer e decide se precisa chamar a calculadora ou a base de conhecimento.
+2. **Orquestrador de Intenção:** Keywords determinísticos identificam simulações (financiamento, juros, gastos) versus consultas gerais.
 3. **Calculadora Sandbox (Python):** Funções isoladas que fazem a matemática exata de juros compostos e financiamentos (SAC).
-4. **Base RAG:** Guarda dados de produtos (CDB, Tesouro Direto) e taxas econômicas atuais.
-5. **Validador de Saída:** Garante que os números da resposta estejam corretos e insere o disclaimer obrigatório.
+4. **Base de Conhecimento Estruturada:** Dados estáticos de produtos (CDB, Tesouro Direto) e indicadores de referência (SELIC, CDI, IPCA).
+5. **LLM Conversacional (Ollama):** Fallback para dúvidas fora dos 3 fluxos de simulação. Fornece contexto educativo geral.
+6. **Validador de Saída:** Garante que os números da resposta estejam corretos e insere o disclaimer obrigatório.
 
 ---
 
 ## 4. Pipeline do Agente (Fluxo de Execução)
 
 1. **Entrada e Sanitização:** O usuário envia a mensagem. O filtro intercepta e remove qualquer CPF, e-mail ou dado sensível.
-2. **Identificação da Intenção:** O LLM analisa se a requisição é conceitual (consulta RAG) ou uma simulação (invoca função da calculadora).
+2. **Identificação da Intenção:** Orquestração por keywords determinísticos detecta se é simulação (financiamento/juros), análise de gastos, ou consulta geral. Sem LLM nesta etapa.
 3. **Cálculo Determinístico:** Em simulações, a função Python é executada isoladamente e retorna os valores exatos (capital, juros, parcela).
-4. **Resposta com Disclaimer:** O LLM formata a resposta final e anexa automaticamente o aviso legal obrigatório.
+4. **Resposta com Disclaimer:** Simulações retornam números + disclaimer. Consultas gerais são delegadas ao LLM (Ollama) para resposta conversacional.
 
 ---
 
